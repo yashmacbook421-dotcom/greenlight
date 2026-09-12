@@ -1,0 +1,33 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: greenlight
+      POSTGRES_PASSWORD: greenlight
+      POSTGRES_DB: greenlight
+    ports:
+      - "5433:5432"   # 5433 on the host to avoid clashing with a local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greenlight -d greenlight"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build: ./backend
+    environment:
+      GREENLIGHT_DATABASE_URL: postgresql+psycopg://greenlight:greenlight@db:5432/greenlight
+      GREENLIGHT_STORAGE_DIR: /data/documents
+    volumes:
+      - documents:/data/documents
+    ports:
+      - "8010:8000"   # 8010 on the host; 8000 is commonly taken
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  documents:

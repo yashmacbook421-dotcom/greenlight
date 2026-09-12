@@ -1,0 +1,13 @@
+{
+  "pge_rule21_2025-08-29": {
+    "title": "PG&E Electric Rule No. 21 — Generating Facility Interconnections",
+    "utility": "PGE",
+    "url": "https://www.pge.com/tariffs/assets/pdf/tariffbook/ELEC_RULES_21.pdf",
+    "sha256": "76768f26a08fd5760c4727832b2d538ee8e3c0144a18836f508f3f143f0bfe9f",
+    "bytes": 26422475,
+    "pages": 290,
+    "advice_letter": "7692-E",
+    "effective": "2025-08-29",
+    "notes": "Tariff sheet numbers equal PDF page numbers in this edition. PG&E replaces the file at the same URL when the tariff is revised; the sha256 pins this edition."
+  }
+}
