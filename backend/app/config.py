@@ -9,5 +9,10 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 25 * 1024 * 1024
     max_pages_per_document: int = 200
 
+    # Claude. Credentials come from the SDK's usual sources (ANTHROPIC_API_KEY, or an `ant auth login` profile).
+    llm_model: str = "claude-opus-5"
+    llm_effort: str | None = None  # None = API default ("high")
+    llm_max_tokens: int = 16000
+
 
 settings = Settings()

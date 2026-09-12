@@ -161,6 +161,7 @@ class ExtractedFact(Base):
         ),
         CheckConstraint("length(btrim(quote)) > 0", name="quote_nonempty"),
         CheckConstraint("confidence IS NULL OR (confidence >= 0 AND confidence <= 1)", name="confidence_unit"),
+        CheckConstraint("verification IN ('text_match', 'image_unverified', 'oracle')", name="verification_valid"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -172,6 +173,12 @@ class ExtractedFact(Base):
     page_no: Mapped[int] = mapped_column(Integer, nullable=False)
     quote: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
+    # What the page said, before unit conversion; `value`/`unit` are canonical.
+    value_as_written: Mapped[str | None] = mapped_column(Text)
+    unit_as_written: Mapped[str | None] = mapped_column(String(32))
+    instance: Mapped[str | None] = mapped_column(String(64))
+    verification: Mapped[str] = mapped_column(String(32), nullable=False, server_default="text_match")
+    extracted_by: Mapped[str | None] = mapped_column(String(64))
     extracted_at: Mapped[datetime] = _created_at()
 
 

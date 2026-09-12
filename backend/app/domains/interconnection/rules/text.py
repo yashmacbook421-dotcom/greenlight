@@ -1,18 +1,14 @@
-"""Loading and normalising pinned rule text, for citation verification."""
+"""Loading pinned rule text, for citation verification."""
 
 import json
 from functools import cache
 from pathlib import Path
 
+from app.core.text import normalize
+
+__all__ = ["RULES_DIR", "normalize", "sheets"]
+
 RULES_DIR = Path(__file__).parent
-
-_TRANSLATE = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"',
-                            "–": "-", "—": "-", " ": " ", "­": ""})
-
-
-def normalize(text: str) -> str:
-    """Typographic quotes/dashes to ASCII, all whitespace runs (incl. line breaks) to one space."""
-    return " ".join(text.translate(_TRANSLATE).split())
 
 
 @cache

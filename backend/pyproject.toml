@@ -12,7 +12,8 @@ dependencies = [
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.20",
     "pypdf>=5.1",
-    "cryptography>=44",  # pypdf needs it to open AES-encrypted PDFs (common on datasheets)
+    "cryptography>=44",
+    "anthropic>=1.5",  # pypdf needs it to open AES-encrypted PDFs (common on datasheets)
 ]
 
 [project.optional-dependencies]
