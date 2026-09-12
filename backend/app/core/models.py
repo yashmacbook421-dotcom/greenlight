@@ -18,6 +18,8 @@ from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
+    Index,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -29,7 +31,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -328,3 +330,31 @@ class Proposal(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created_at()
+
+
+class RuleChunk(Base):
+    """One section of a pinned rule document on one sheet/page, indexed for full-text search.
+
+    Postgres full-text search rather than embeddings: deterministic, no extra vendor,
+    and good at the exact terms rule text uses ("30 kVA", "Screen M", "deficiency").
+    """
+
+    __tablename__ = "rule_chunks"
+    __table_args__ = (
+        UniqueConstraint("ruleset", "ordinal"),
+        Index("ix_rule_chunks_search", "search", postgresql_using="gin"),
+        Index("ix_rule_chunks_ruleset_sheet", "ruleset", "sheet"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    ruleset: Mapped[str] = mapped_column(String(64), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    sheet: Mapped[int] = mapped_column(Integer, nullable=False)
+    section: Mapped[str] = mapped_column(String(32), nullable=False)
+    heading: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    search: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("setweight(to_tsvector('english', section || ' ' || heading), 'A') || "
+                 "setweight(to_tsvector('english', text), 'B')", persisted=True),
+    )
