@@ -1,0 +1,9 @@
+{
+ "source": "California Energy Commission, Grid Support Inverter Lists (solar and battery)",
+ "url": "https://solarequipment.energy.ca.gov/Home/DownloadtoExcel?filename=InvertersList",
+ "source_sha256": "32b382a3e2bfb44737d81f80e2fe667fc48944db10bf4fd7f0cdb41bf0711e07",
+ "list_data_as_of": "September 11, 2026",
+ "retrieved": "2026-09-12",
+ "rows": 3280,
+ "use": "Proxy for PG&E Rule 21 Screen B 'Certified Equipment' (\u00a7L). The CEC list records UL 1741 SA/SB grid-support certification that California utilities rely on; it is not the tariff's own definition."
+}

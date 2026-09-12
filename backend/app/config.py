@@ -14,5 +14,9 @@ class Settings(BaseSettings):
     llm_effort: str | None = None  # None = API default ("high")
     llm_max_tokens: int = 16000
 
+    # Screens D and E defer to "established Distribution Provider practice", which PG&E does not publish.
+    # When enabled, clearly labelled demonstration values are used; when disabled, D and E go to an engineer.
+    synthetic_utility_practice: bool = True
+
 
 settings = Settings()

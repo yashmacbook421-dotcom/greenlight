@@ -191,6 +191,8 @@ class Discrepancy(Base):
     __table_args__ = (
         CheckConstraint("material IS NULL OR rationale IS NOT NULL", name="judgment_has_rationale"),
         CheckConstraint("jsonb_typeof(observed) = 'array'", name="observed_is_array"),
+        CheckConstraint("method IS NULL OR method IN ('rule_outcome', 'llm')", name="method_valid"),
+        CheckConstraint("(material IS NULL) = (method IS NULL)", name="judged_has_method"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -200,6 +202,8 @@ class Discrepancy(Base):
     observed: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     material: Mapped[bool | None] = mapped_column()
     rationale: Mapped[str | None] = mapped_column(Text)
+    # How materiality was decided: 'rule_outcome' (re-ran the rules with each value), 'llm', or NULL if not yet judged.
+    method: Mapped[str | None] = mapped_column(String(16))
     detected_at: Mapped[datetime] = _created_at()
     judged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

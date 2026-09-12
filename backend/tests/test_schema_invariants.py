@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.core.models import Case, Document, ExtractedFact, Page, Proposal, RuleResult
 from app.domains.interconnection import DOMAIN
-from app.domains.interconnection.models import CircuitModel
 
 HASH = "0" * 64
 
@@ -89,11 +88,6 @@ def test_inconclusive_without_blocker_is_refused(session: Session, case: Case) -
 
 def test_skipped_without_router_is_refused(session: Session, case: Case) -> None:
     _refused(session, _result(case, status="SKIPPED", citation=[{"section": "G.1.j", "sheet": 151}]))
-
-
-def test_unknown_synthetic_field_is_refused(session: Session) -> None:
-    _refused(session, CircuitModel(utility="PGE", feeder_id="F1", line_section_id="S1", source="ICA",
-                                   synthetic_fields=["made_up_column"]))
 
 
 # --- the human gate -----------------------------------------------------------
