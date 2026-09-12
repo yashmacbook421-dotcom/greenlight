@@ -59,3 +59,10 @@ def test_screens_do_no_io() -> None:
     )
     out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "", f"importing the screen engine loaded: {out.stdout.strip()}"
+
+
+def test_domain_packages_stay_import_free() -> None:
+    """Regression: a registry in app/domains/__init__.py once pulled the Anthropic SDK into the screen engine."""
+    import app.domains as domains_pkg
+    tree = ast.parse(Path(domains_pkg.__file__).read_text())
+    assert not [n for n in ast.walk(tree) if isinstance(n, ast.Import | ast.ImportFrom)]

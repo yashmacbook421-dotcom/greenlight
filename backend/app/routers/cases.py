@@ -11,7 +11,7 @@ from app.core.llm import LLMError
 from app.core.models import Case, Document, Page
 from app.core.schemas import CaseOut, DocumentOut, ExtractionOut, FactOut, PageOut, PageSummary, RejectedFactOut
 from app.deps import LLMDep, SessionDep, StorageDep
-from app.domains import DOCUMENT_KINDS, EXTRACTION_FIELDS
+from app.registry import DOCUMENT_KINDS, EXTRACTION_FIELDS
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
