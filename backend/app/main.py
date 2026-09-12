@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import cases, health, interconnection, rules
+from app.routers import cases, health, interconnection, review, rules
 
 app = FastAPI(
     title="Project Greenlight",
@@ -10,3 +10,4 @@ app.include_router(health.router)
 app.include_router(interconnection.router)
 app.include_router(cases.router)
 app.include_router(rules.router)
+app.include_router(review.router)

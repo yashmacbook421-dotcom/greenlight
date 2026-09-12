@@ -21,6 +21,15 @@ def get_llm_client() -> MessagesClient:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Claude API is not configured: {exc}") from exc
 
 
+def get_optional_llm_client() -> MessagesClient | None:
+    """The review pipeline degrades to deterministic drafting when Claude is not configured."""
+    try:
+        return default_client()
+    except anthropic.AnthropicError:
+        return None
+
+
 SessionDep = Annotated[Session, Depends(get_session)]
+OptionalLLMDep = Annotated[MessagesClient | None, Depends(get_optional_llm_client)]
 LLMDep = Annotated[MessagesClient, Depends(get_llm_client)]
 StorageDep = Annotated[LocalStorage, Depends(get_storage)]

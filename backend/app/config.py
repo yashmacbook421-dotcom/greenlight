@@ -18,5 +18,8 @@ class Settings(BaseSettings):
     # When enabled, clearly labelled demonstration values are used; when disabled, D and E go to an engineer.
     synthetic_utility_practice: bool = True
 
+    agent_step_budget: int = 12  # model calls per review
+    agent_cost_ceiling_usd: str = "1.00"
+
 
 settings = Settings()
