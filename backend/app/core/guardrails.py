@@ -58,21 +58,50 @@ def evidence_numbers(evidence: Iterable[str]) -> set[str]:
     return found
 
 
+def _decimals(number: str) -> int:
+    return len(number.split(".")[1]) if "." in number else 0
+
+
+def _rounding_of(number: str, known: set[str]) -> str | None:
+    """An evidence value that rounds to `number` at its shown precision.
+
+    Only for numbers shown with 2+ decimals, and only from evidence with more decimals than shown:
+    "1.12" may present 1.1179245…, but "30" may not present 30.4 (that would hide a threshold crossing).
+    """
+    places = _decimals(number)
+    if places < 2:
+        return None
+    quantum = Decimal(1).scaleb(-places)
+    target = Decimal(number)
+    for e in known:
+        if _decimals(e) > places and Decimal(e).quantize(quantum) == target:
+            return e
+    return None
+
+
 def number_faithfulness(letter: str, evidence: Iterable[str]) -> Verdict:
     known = evidence_numbers(evidence)
-    unsupported = []
+    unsupported: list[str] = []
+    rounded: dict[str, str] = {}
     for number, is_percent in numbers_in(letter):
         if number in known:
             continue
         if is_percent and _canon(str(Decimal(number) / 100)) in known:  # 87.5% ↔ 0.875
             continue
+        if (source := _rounding_of(number, known)) is not None:
+            rounded[number] = source
+            continue
         unsupported.append(number + ("%" if is_percent else ""))
     unsupported = sorted(set(unsupported))
+    data: dict[str, Any] = {"rounded": rounded} if rounded else {}
     if unsupported:
         return Verdict("number_faithfulness", False,
                        f"numbers not found in any tool result or case evidence: {', '.join(unsupported)}",
-                       {"unsupported": unsupported})
-    return Verdict("number_faithfulness", True, "every number in the letter appears in recorded evidence")
+                       {"unsupported": unsupported, **data})
+    detail = "every number in the letter appears in recorded evidence"
+    if rounded:
+        detail += f" ({len(rounded)} shown rounded from a longer evidence value)"
+    return Verdict("number_faithfulness", True, detail, data)
 
 
 _CITATION = re.compile(r"§\s*([A-Z](?:\.[A-Za-z0-9]+)*)(?:[^§\n]{0,12}?\bSheet\s+(\d+))?")

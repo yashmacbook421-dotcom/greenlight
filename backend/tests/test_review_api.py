@@ -92,3 +92,15 @@ def test_review_with_claude_records_a_trace(api: TestClient, case_id: str) -> No
     assert body["llm_used"] is True and body["proposal"]["agent_run_id"]
     [run] = api.get(f"/cases/{case_id}/trace").json()
     assert run["terminated_by"] == "proposal" and [s["role"] for s in run["steps"]] == ["assistant", "tool"]
+
+
+def test_demo_packet_with_oracle_facts_reviews_end_to_end(api: TestClient) -> None:
+    created = api.post("/demo/packets", json={"family": "uncertified_inverter", "seed": 3, "oracle_facts": True}).json()
+    review = api.post(f"/cases/{created['case_id']}/review").json()
+    assert review["proposal"]["disposition"] == created["expected_disposition"] == "SUPPLEMENTAL_REVIEW_REQUIRED"
+    assert api.post("/demo/packets", json={"family": "nope"}).status_code == 422
+
+
+def test_cors_allows_the_frontend(api: TestClient) -> None:
+    r = api.options("/cases", headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"})
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"

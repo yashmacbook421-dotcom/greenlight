@@ -57,3 +57,16 @@ def test_unsourced_items_are_stripped() -> None:
     items = [{"basis_kind": "screen", "basis_ref": "J"}, {"basis_kind": "fact", "basis_ref": "made-up"}]
     kept, v = provenance_completeness(items, lambda k, r: r == "J")
     assert kept == items[:1] and not v.passed
+
+
+def test_rounded_presentation_of_a_long_evidence_value_is_accepted_and_recorded() -> None:
+    evidence = ['{"short_circuit_pu": "1.117924528301886792452830189", "computed": "30.4"}']
+    v = number_faithfulness("Per-unit contribution of approximately 1.12.", evidence)
+    assert v.passed and v.data["rounded"] == {"1.12": "1.117924528301886792452830189"}
+
+
+def test_rounding_cannot_hide_a_threshold_crossing_or_invent_digits() -> None:
+    evidence = ['{"computed": "30.4", "short_circuit_pu": "1.117924528301886792452830189"}']
+    assert not number_faithfulness("The facility is 30 kVA.", evidence).passed       # 0 decimals: never rounded
+    assert not number_faithfulness("Contribution of 1.18.", evidence).passed          # does not round from evidence
+    assert not number_faithfulness("Rating 30.40 kVA and 30.4.", ['{"x": "30.4"}']).data.get("rounded")

@@ -140,6 +140,11 @@ class _Doc:
         self.pages[-1].append(text)
         self.facts.append(OracleFact(self.kind, field_name, value, unit, len(self.pages), text, instance))
 
+    def statement(self, text: str, field_name: str, value: str, unit: str | None = None) -> None:
+        """An unlabelled line that still states a fact (e.g. a diagram annotation)."""
+        self.pages[-1].append(text)
+        self.facts.append(OracleFact(self.kind, field_name, value, unit, len(self.pages), text))
+
     def choice(self, label: str, field_name: str, choice: str, shown: str) -> None:
         text = f"{label}: {shown}"
         self.pages[-1].append(text)
@@ -257,7 +262,8 @@ def generate(family_name: str, seed: int) -> Packet:
     # One-line diagram
     one_line = _Doc("one_line_diagram", "Single Line Diagram")
     one_line.fact("Customer", "applicant_name", other_applicant if family_name == "applicant_conflict" else applicant)
-    one_line.line(f"Utility meter -> Main service panel {_d(panel_a, '1')} A -> AC disconnect -> inverter(s)")
+    one_line.statement(f"Utility meter -> Main service panel {_d(panel_a, '1')} A -> AC disconnect -> inverter(s)",
+                       "service_panel_rating", _d(panel_a, "1"), "A")
     one_line.fact("Inverter", "inverter_model", model)
     one_line.fact("Inverter quantity", "inverter_quantity", "2" if family_name == "quantity_conflict" else str(qty))
     one_line.line("PV array -> DC disconnect -> inverter DC input")

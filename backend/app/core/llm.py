@@ -71,7 +71,15 @@ def cost_usd(model: str, *, input_tokens: int, output_tokens: int, cache_creatio
 
 
 def default_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic()
+    """A client with resolvable credentials, or AnthropicError.
+
+    The SDK constructs a client without credentials and only fails on the first request; checking here lets
+    callers fall back (e.g. to deterministic drafting) instead of failing mid-review.
+    """
+    client = anthropic.Anthropic()
+    if not (client.api_key or client.auth_token or client.credentials):
+        raise anthropic.AnthropicError("no Claude API credentials found (set ANTHROPIC_API_KEY or run `ant auth login`)")
+    return client
 
 
 def parse_structured(client: MessagesClient, *, model: str, max_tokens: int, effort: str | None,

@@ -222,3 +222,16 @@ def test_extract_endpoint_without_credentials_is_503(api: TestClient, packet, mo
     monkeypatch.setattr(deps, "default_client", no_credentials)
     case, spec, _ = packet
     assert api.post(f"/cases/{case.id}/documents/{spec.id}/extract").status_code == 503
+
+
+def test_default_client_refuses_to_start_without_credentials(monkeypatch) -> None:
+    import anthropic
+
+    from app.core.llm import default_client
+    from app.deps import get_optional_llm_client
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HOME", "/nonexistent-home")
+    with pytest.raises(anthropic.AnthropicError):
+        default_client()
+    assert get_optional_llm_client() is None  # the review pipeline falls back to deterministic drafting
