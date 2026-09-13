@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://greenlight:greenlight@localhost:5433/greenlight"
     storage_dir: str = "./var/documents"
-    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origins: str = "http://localhost:3100,http://localhost:3000,http://127.0.0.1:3000"
     max_upload_bytes: int = 25 * 1024 * 1024
     max_pages_per_document: int = 200
 

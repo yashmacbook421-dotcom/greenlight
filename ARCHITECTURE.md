@@ -307,32 +307,34 @@ Otherwise Screens F–H and K–M never execute.
 
 ---
 
-## 8. Data model (first cut)
+## 8. Data model (as built)
+
+Core, domain-agnostic tables (`app/core/models.py`), with the invariants enforced by the database:
 
 ```
-Application      id · status · received_at · applicant · site · feeder_id
-Document         id · application_id · kind · sha256 · page_count · storage_uri
-Page             id · document_id · page_no · text
-ExtractedFact    id · application_id · field · value · unit
-                    · document_id · page_no · quote · confidence
-Discrepancy      id · application_id · field · values[] · material · rationale
-CircuitModel     feeder_id · line_section_peak_kw · existing_der_kw
-                    · transformer_kva · fault_duty_a · device_rating_a
-                    · source · synthetic_fields[]
-ScreenResult     id · application_id · screen_id · status · inputs · formula
-                    · computed · threshold · citation · classification · run_at
-AgentRun         id · application_id · step_budget · steps_used · cost_usd
-                    · terminated_by
-AgentStep        id · run_id · n · role · tool · args · result · tokens · latency_ms
-Proposal         id · application_id · disposition · letter_md · items[]
-                    · guardrail_verdicts · status(pending_review|approved|
-                      edited|rejected) · reviewed_by · reviewed_at
+cases            id · domain · status · submitter · received_at
+documents        id · case_id · kind · filename · sha256 · page_count · storage_uri
+pages            document_id · page_no · text · has_text_layer
+extracted_facts  field · value/unit (canonical) · value_as_written · unit_as_written · instance
+                   · (document_id, page_no) → pages · quote (non-empty) · verification · extracted_by
+discrepancies    field · observed[] · material · method (rule_outcome | llm) · rationale
+rule_results     rule_set · rule_id · status (PASS|FAIL|INCONCLUSIVE|NOT_APPLICABLE|SKIPPED) · inputs · formula
+                   · computed · threshold · citation[] · classification · blocker · routed_by
+                   · missing_inputs · synthetic_inputs · overrides (agent what-ifs) · engine_version · input_hash
+rule_chunks      ruleset · section · heading · sheet · text · tsvector (full-text search)
+agent_runs       model · step_budget · steps_used · cost_ceiling_usd · cost_usd · terminated_by
+agent_steps      run_id · n · role · tool · args · result · tokens · cost_usd · latency_ms
+proposals        disposition · model_disposition (set when code overrode it) · letter_md · items[]
+                   · guardrail_verdicts[] · status · reviewed_by · reviewed_at · review_note
+eval_runs        mode (oracle|live) · status · config · metrics · packets[]
 ```
 
-`Proposal.status` transitions are the human gate, in the schema rather than in
-the UI — the state machine has no edge that reaches "sent" without a reviewer.
+Interconnection tables (`app/domains/interconnection/models.py`): `interconnection_applications`
+(1:1 with a case) and `circuit_models` (validated screen-engine attributes plus `synthetic_fields`).
 
----
+The human gate lives in the schema: a trigger makes every proposal start as `pending_review`, requires a
+named reviewer to leave it, forbids changing the letter under `approved` (that is `edited`), and freezes a
+proposal once reviewed. There is no `sent` state.
 
 ## 9. Repo layout
 

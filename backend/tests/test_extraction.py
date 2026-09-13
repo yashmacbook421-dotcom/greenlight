@@ -235,3 +235,20 @@ def test_default_client_refuses_to_start_without_credentials(monkeypatch) -> Non
     with pytest.raises(anthropic.AnthropicError):
         default_client()
     assert get_optional_llm_client() is None  # the review pipeline falls back to deterministic drafting
+
+
+def test_metered_client_attributes_cost_to_stages() -> None:
+    from app.core.llm import MeteredClient
+    from tests.fakes import tool_use, turn
+
+    def respond(kwargs):
+        if "tools" in kwargs:
+            return turn(tool_use("done", {}))
+        return structured([])(kwargs)
+
+    metered = MeteredClient(FakeClient(respond))
+    from app.core.extraction import _output_model
+    metered.beta.messages.parse(output_format=_output_model(FIELDS), messages=[])
+    metered.beta.messages.create(tools=[{}], messages=[])
+    assert metered.by_stage == {"Extraction": Decimal("0.01"), "agent": Decimal("0.01")}
+    assert metered.cost_usd == Decimal("0.02") and len(metered.calls) == 2

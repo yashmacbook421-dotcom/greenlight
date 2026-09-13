@@ -20,13 +20,27 @@ services:
     environment:
       GREENLIGHT_DATABASE_URL: postgresql+psycopg://greenlight:greenlight@db:5432/greenlight
       GREENLIGHT_STORAGE_DIR: /data/documents
+      GREENLIGHT_CORS_ORIGINS: http://localhost:3100,http://localhost:3000
+      # Optional. Without it, reviews use the deterministic template drafter and no extraction runs.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - documents:/data/documents
+      - ./data/rules:/data/rules:ro   # the pinned tariff PDF, if downloaded with scripts/fetch_rules.py
     ports:
       - "8010:8000"   # 8010 on the host; 8000 is commonly taken
     depends_on:
       db:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8010
+    ports:
+      - "3100:3000"   # 3100 on the host; 3000 is commonly taken
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

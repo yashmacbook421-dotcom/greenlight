@@ -36,6 +36,7 @@ from app.domains.interconnection.screens.types import Blocker, Classification, S
 from app.core.intake import ingest_document
 
 SPECS = {s.name: s for s in FIELDS}
+STAGE_NAMES = {"Extraction": "extraction", "_Judgments": "materiality_judge", "agent": "agent"}
 
 
 class GeneratorError(RuntimeError):
@@ -163,6 +164,7 @@ def evaluate_packet(session: Session, storage: LocalStorage, packet: Packet, cfg
         "extraction": extraction, "latency_s": latency_s,
         "cost_usd": format(metered.cost_usd, "f") if metered else "0",
         "llm_calls": len(metered.calls) if metered else 0,
+        "cost_by_stage": {STAGE_NAMES.get(k, k): format(v, "f") for k, v in metered.by_stage.items()} if metered else {},
     }
 
 
@@ -216,6 +218,12 @@ def aggregate(results: list[dict[str, Any]], mode: str) -> dict[str, Any]:
                                "per_application_mean": format(sum(costs, Decimal(0)) / n, ".4f") if n else None,
                                "per_application_max": format(max(costs), "f") if costs else None}
         metrics["llm_calls_mean"] = round(sum(r["llm_calls"] for r in ok) / n, 2) if n else None
+        stages: dict[str, Decimal] = defaultdict(Decimal)
+        for r in ok:
+            for stage, cost in r.get("cost_by_stage", {}).items():
+                stages[stage] += Decimal(cost)
+        total = sum(stages.values(), Decimal(0))
+        metrics["cost_share_by_stage"] = {k: round(float(v / total), 4) for k, v in stages.items()} if total else {}
     return metrics
 
 

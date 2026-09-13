@@ -119,18 +119,24 @@ class MeteredClient:
         class _Messages:
             def parse(self, **kwargs: Any) -> Any:
                 response = inner.beta.messages.parse(**kwargs)
-                meter.calls.append(CallRecord.from_response(response))
+                meter.record(getattr(kwargs.get("output_format"), "__name__", "structured"), response)
                 return response
 
             def create(self, **kwargs: Any) -> Any:
                 response = inner.beta.messages.create(**kwargs)
-                meter.calls.append(CallRecord.from_response(response))
+                meter.record("agent" if kwargs.get("tools") else "message", response)
                 return response
 
         class _Beta:
             messages = _Messages()
 
         self.beta = _Beta()
+        self.by_stage: dict[str, Decimal] = {}
+
+    def record(self, stage: str, response: Any) -> None:
+        call = CallRecord.from_response(response)
+        self.calls.append(call)
+        self.by_stage[stage] = self.by_stage.get(stage, Decimal(0)) + (call.cost_usd or Decimal(0))
 
     @property
     def cost_usd(self) -> Decimal:
