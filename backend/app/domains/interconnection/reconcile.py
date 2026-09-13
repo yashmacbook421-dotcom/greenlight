@@ -38,6 +38,10 @@ COMPLETE_AND_VALID = Citation("E.5", 70, "An Interconnection Request will be con
                                          "Distribution Provider and deemed valid by Distribution Provider.")
 REQUIRED_DOCUMENTS = ("application_form", "one_line_diagram", "inverter_spec_sheet")
 
+# Greenlight policy, not tariff text: numeric statements of the same quantity that differ by more than this
+# relative spread need the applicant to clarify, even when no screen outcome changes (e.g. 1 vs 2 inverters).
+ROUNDING_TOLERANCE = Decimal("0.02")
+
 IDENTITY_FIELDS = ("applicant_name", "site_address", "installer_name", "inverter_manufacturer", "inverter_model",
                    "battery_manufacturer", "battery_model", "inverter_certification", "system_dc_rating",
                    "battery_usable_capacity", "battery_rated_power", "inverter_nominal_ac_voltage")
@@ -283,9 +287,17 @@ def reconcile(facts: Sequence[FactView], document_kinds: Iterable[str], circuit:
         distinct = {(d, tuple(sorted(s.items()))) for d, s in outcomes.values()}
         worst = max(candidates, key=lambda c: (SEVERITY[outcomes[id(c)][0]], _sort_key(c)))
         values = ", ".join(_fmt(c.value) for c in sorted(candidates, key=_sort_key))
-        if len(distinct) == 1:
+        numeric = [c.value for c in candidates if isinstance(c.value, Decimal)]
+        spread = (max(numeric) - min(numeric)) / max(numeric) if len(numeric) == len(candidates) and max(numeric) > 0 else None
+        if len(distinct) == 1 and (spread is None or spread <= ROUNDING_TOLERANCE):
             rationale = f"Re-running Initial Review with each value ({values}) leaves every screen outcome unchanged."
+            if spread is not None:
+                rationale += f" The values differ by {_fmt((spread * 100).quantize(Decimal('0.01')))}%, within the 2% rounding tolerance."
             material = False
+        elif len(distinct) == 1:
+            rationale = (f"Values {values} differ by {_fmt((spread * 100).quantize(Decimal('0.1')))}%, beyond the 2% "
+                         "rounding tolerance; no screen outcome changes, but the application must state one value.")
+            material = True
         else:
             base_d, base_s = outcomes[id(candidates[0])]
             diffs = []

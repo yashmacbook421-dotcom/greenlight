@@ -180,7 +180,7 @@ def test_refusal_and_truncation_store_nothing(session: Session, storage: LocalSt
     with pytest.raises(error):
         extract_document(session, FakeClient(structured([], stop_reason=stop)), storage, spec, FIELDS,
                          model="claude-opus-5", max_tokens=4000)
-    assert session.scalars(select(ExtractedFact)).all() == []
+    assert session.scalars(select(ExtractedFact).where(ExtractedFact.document_id == spec.id)).all() == []
 
 
 def test_prompt_marks_document_text_as_data_not_instructions() -> None:

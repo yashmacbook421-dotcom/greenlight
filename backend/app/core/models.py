@@ -362,3 +362,24 @@ class RuleChunk(Base):
         Computed("setweight(to_tsvector('english', section || ' ' || heading), 'A') || "
                  "setweight(to_tsvector('english', text), 'B')", persisted=True),
     )
+
+
+class EvalRun(Base):
+    """One evaluation over a generated corpus. `packets` holds per-packet results; `metrics` the aggregates."""
+
+    __tablename__ = "eval_runs"
+    __table_args__ = (
+        CheckConstraint("mode IN ('oracle', 'live')", name="mode_valid"),
+        CheckConstraint("status IN ('running', 'completed', 'stopped', 'failed')", name="status_valid"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="running")
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    packets: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    note: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[datetime] = _created_at()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

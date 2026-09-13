@@ -98,3 +98,36 @@ def parse_structured(client: MessagesClient, *, model: str, max_tokens: int, eff
     if response.parsed_output is None:
         raise LLMError(f"no structured output (stop_reason={response.stop_reason}, request_id={record.request_id})")
     return response.parsed_output, record
+
+
+class MeteredClient:
+    """Wraps a client and totals the cost of every call made through it (extraction, judge, agent)."""
+
+    def __init__(self, inner: MessagesClient) -> None:
+        self._inner = inner
+        self.calls: list[CallRecord] = []
+        meter = self
+
+        class _Messages:
+            def parse(self, **kwargs: Any) -> Any:
+                response = inner.beta.messages.parse(**kwargs)
+                meter.calls.append(CallRecord.from_response(response))
+                return response
+
+            def create(self, **kwargs: Any) -> Any:
+                response = inner.beta.messages.create(**kwargs)
+                meter.calls.append(CallRecord.from_response(response))
+                return response
+
+        class _Beta:
+            messages = _Messages()
+
+        self.beta = _Beta()
+
+    @property
+    def cost_usd(self) -> Decimal:
+        return sum((c.cost_usd or Decimal(0) for c in self.calls), Decimal(0))
+
+    @property
+    def unpriced_calls(self) -> int:
+        return sum(1 for c in self.calls if c.cost_usd is None)

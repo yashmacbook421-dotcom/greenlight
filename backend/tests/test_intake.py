@@ -101,7 +101,8 @@ def test_unreadable_uploads_are_rejected(client, case_id, session: Session, data
     r = _upload(client, case_id, data)
     assert r.status_code == 422
     assert detail in r.json()["detail"]
-    assert session.scalar(select(func.count()).select_from(Page)) == 0
+    assert session.scalar(select(func.count()).select_from(Page).join(Document, Page.document_id == Document.id)
+                          .where(Document.case_id == case_id)) == 0
 
 
 def test_oversized_upload_is_rejected(client, case_id, monkeypatch) -> None:

@@ -84,10 +84,11 @@ def _jsonable(v: Any) -> Any:
     return getattr(v, "value", v)
 
 
-def screen_case(session: Session, case: Case, client: MessagesClient | None = None) -> ScreeningOutcome:
+def screen_case(session: Session, case: Case, client: MessagesClient | None = None,
+                judge: Judge | None = None) -> ScreeningOutcome:
     facts, kinds = load_facts(session, case.id)
     circuit, _ = load_circuit(session, case.id)
-    rec = reconcile(facts, kinds, circuit, practice(), judge=llm_judge(client) if client else None)
+    rec = reconcile(facts, kinds, circuit, practice(), judge=judge or (llm_judge(client) if client else None))
     inputs = ScreenInputs(rec.facility, circuit, practice())
     review = run_initial_review(inputs)
     floor = disposition_floor(rec, review.disposition_floor())

@@ -61,8 +61,18 @@ def test_rounding_mismatch_that_changes_nothing_is_immaterial() -> None:
     rec = reconcile(facts, DOCS, CIRCUIT, PRACTICE)
     [finding] = rec.findings
     assert finding.field == "gross_rating_kw" and finding.material is False and finding.method is Method.RULE_OUTCOME
-    assert "unchanged" in finding.rationale and finding.chosen == D("7.68")  # conservative: larger value
+    assert "unchanged" in finding.rationale and "1.04%, within" in finding.rationale
+    assert finding.chosen == D("7.68")  # conservative: larger value
     assert rec.applicant_blockers() == []
+
+
+def test_large_conflict_is_material_even_when_no_screen_changes() -> None:
+    facts = [f for f in residential() if f.field != "inverter_quantity"] + [
+        fv("inverter_quantity", "1"), fv("inverter_quantity", "2", kind="one_line_diagram")]
+    rec = reconcile(facts, DOCS, Circuit(networked_secondary=False, service_transformer_kva=D("100"),
+                                         existing_gross_on_service_transformer_kva=D("0")), PRACTICE)
+    [finding] = [f for f in rec.findings if f.field == "gross_rating_kw"]
+    assert finding.material is True and "beyond the 2% rounding tolerance" in finding.rationale
 
 
 def test_mismatch_that_crosses_30_kva_is_material_and_explained() -> None:

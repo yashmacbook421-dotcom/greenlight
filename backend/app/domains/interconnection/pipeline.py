@@ -12,6 +12,7 @@ from app.core.models import Case, Document, ExtractedFact, Proposal
 from app.core.storage import LocalStorage
 from app.domains.interconnection.agent.review import draft_deterministic, draft_with_agent, finalize
 from app.domains.interconnection.extraction_fields import FIELDS
+from app.domains.interconnection.reconcile import Judge
 from app.domains.interconnection.service import ScreeningOutcome, screen_case
 
 
@@ -23,7 +24,7 @@ class ReviewOutcome:
 
 
 def review_case(session: Session, case: Case, *, client: MessagesClient | None, storage: LocalStorage,
-                reextract: bool = False) -> ReviewOutcome:
+                reextract: bool = False, judge: Judge | None = None) -> ReviewOutcome:
     extractions = []
     if client is not None:
         documents = session.scalars(select(Document).where(Document.case_id == case.id).order_by(Document.created_at)).all()
@@ -33,7 +34,7 @@ def review_case(session: Session, case: Case, *, client: MessagesClient | None, 
                 extractions.append(extract_document(session, client, storage, doc, FIELDS, model=settings.llm_model,
                                                     max_tokens=settings.llm_max_tokens, effort=settings.llm_effort))
     case.status = "screening"
-    screening = screen_case(session, case, client)
+    screening = screen_case(session, case, client, judge=judge)
     if client is not None:
         draft = draft_with_agent(session, client, case, screening)
     else:
