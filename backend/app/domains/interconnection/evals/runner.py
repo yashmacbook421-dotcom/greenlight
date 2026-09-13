@@ -253,7 +253,7 @@ def run_eval(session_factory: Callable[[], Session], storage: LocalStorage, pack
         assert run is not None
         run.packets = results
         run.metrics = aggregate(results, cfg.mode)
-        run.status = status
+        run.status = "failed" if results and all("error" in r for r in results) else status
         run.finished_at = datetime.now(UTC)
         s.commit()
     return run_id

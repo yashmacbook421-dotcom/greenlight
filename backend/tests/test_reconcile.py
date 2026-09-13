@@ -162,3 +162,10 @@ def test_phase_configuration_drives_screen_e_inputs(config, service_v, center_ta
         facts += [fv("service_voltage", service_v, "V"), fv("service_phases", "1")]
     f = reconcile(facts, DOCS, CIRCUIT, PRACTICE).facility
     assert (f.on_240v_center_tap, f.phase_imbalance_kva) == (center_tap, imbalance)
+
+
+def test_per_unit_ratio_is_rounded_up_never_down() -> None:
+    facts = [f for f in residential() if not f.field.startswith("inverter_max")] + [
+        fv("inverter_max_continuous_output_current", "21.2", "A"), fv("inverter_max_fault_current", "23.7", "A")]
+    pu = reconcile(facts, DOCS, CIRCUIT, PRACTICE).facility.short_circuit_pu
+    assert pu == D("1.117925")  # 23.7 / 21.2 = 1.1179245…, ceiling at 6 places

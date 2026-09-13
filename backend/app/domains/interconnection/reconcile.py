@@ -17,7 +17,7 @@ import enum
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from itertools import product
 from typing import Any
 
@@ -41,6 +41,7 @@ REQUIRED_DOCUMENTS = ("application_form", "one_line_diagram", "inverter_spec_she
 # Greenlight policy, not tariff text: numeric statements of the same quantity that differ by more than this
 # relative spread need the applicant to clarify, even when no screen outcome changes (e.g. 1 vs 2 inverters).
 ROUNDING_TOLERANCE = Decimal("0.02")
+PU_QUANTUM = Decimal("0.000001")
 
 IDENTITY_FIELDS = ("applicant_name", "site_address", "installer_name", "inverter_manufacturer", "inverter_model",
                    "battery_manufacturer", "battery_model", "inverter_certification", "system_dc_rating",
@@ -187,7 +188,9 @@ def _pu_candidates(facts: Sequence[FactView]) -> list[Candidate]:
         options = []
         for fc, rc in product(_distinct(faults[inst], _dec), _distinct(currents[inst], _dec)):
             if rc.value > 0:
-                options.append((fc.value / rc.value, Source(fc.sources[0].fact_ids + rc.sources[0].fact_ids,
+                # Rounded up to 6 places: never makes a failing contribution pass (Screen F1 tests <= 1.2).
+                ratio = (fc.value / rc.value).quantize(PU_QUANTUM, rounding=ROUND_CEILING)
+                options.append((ratio, Source(fc.sources[0].fact_ids + rc.sources[0].fact_ids,
                                                             f"{_fmt(fc.value)} A ÷ {_fmt(rc.value)} A")))
         if options:
             per_instance.append(options)

@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+.letter h1 { font-size: 1.15rem; font-weight: 600; margin: 0.25rem 0 0.75rem; }
+.letter h2 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+.letter h3 { font-size: 0.95rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.letter p { margin: 0.5rem 0; line-height: 1.6; }
+.letter ul { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+.letter ol { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+.letter li { margin: 0.2rem 0; line-height: 1.55; }
+.letter table { border-collapse: collapse; margin: 0.75rem 0; font-size: 0.85rem; }
+.letter th, .letter td { border: 1px solid #e2e8f0; padding: 0.3rem 0.6rem; text-align: left; }
+.letter th { background: #f8fafc; }
+.letter hr { margin: 1rem 0; border-color: #e2e8f0; }
+.letter blockquote { border-left: 3px solid #cbd5e1; padding-left: 0.75rem; color: #475569; }
+.letter code { font-family: var(--font-mono); font-size: 0.85em; }
