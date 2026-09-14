@@ -104,3 +104,14 @@ def test_demo_packet_with_oracle_facts_reviews_end_to_end(api: TestClient) -> No
 def test_cors_allows_the_frontend(api: TestClient) -> None:
     r = api.options("/cases", headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"})
     assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_cors_origin_regex_is_off_by_default_and_opt_in() -> None:
+    from starlette.middleware.cors import CORSMiddleware as Cors
+
+    from app.config import settings
+    assert settings.cors_origin_regex == ""
+    lovable = r"https://.*\.(lovable\.app|lovableproject\.com|lovable\.dev)"
+    mw = Cors(app=lambda *a: None, allow_origins=[], allow_origin_regex=lovable)
+    assert mw.is_allowed_origin("https://id-preview--abc123.lovable.app")
+    assert not mw.is_allowed_origin("https://evil.example.com")

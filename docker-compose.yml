@@ -21,6 +21,8 @@ services:
       GREENLIGHT_DATABASE_URL: postgresql+psycopg://greenlight:greenlight@db:5432/greenlight
       GREENLIGHT_STORAGE_DIR: /data/documents
       GREENLIGHT_CORS_ORIGINS: http://localhost:3100,http://localhost:3000
+      # Opt-in, e.g. while testing a Lovable-hosted frontend: export GREENLIGHT_CORS_ORIGIN_REGEX before `up`.
+      GREENLIGHT_CORS_ORIGIN_REGEX: ${GREENLIGHT_CORS_ORIGIN_REGEX:-}
       # Optional. Without it, reviews use the deterministic template drafter and no extraction runs.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
