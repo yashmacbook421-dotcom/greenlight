@@ -1,4 +1,7 @@
-# Lovable prompt — Greenlight
+# Connecting a Lovable frontend to the live Greenlight API (later)
+
+Use this after building the UI with `01-build-prompt.md` and `02-sample-data.md`, when you want the Lovable
+preview to talk to your running backend instead of mock data.
 
 ## Path A (recommended): Lovable builds the UI, connected to the existing Greenlight API
 
