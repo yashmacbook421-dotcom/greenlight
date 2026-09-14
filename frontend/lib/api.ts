@@ -1,173 +1,315 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8010";
+import { CASE_ID, cases, evalDetail, evalRuns, families, review, rules, trace } from "@/mocks/data";
+import type {
+  ApiErrorDetail,
+  CaseDocument,
+  DefectFamily,
+  DocumentKind,
+  EvalDetail,
+  EvalRun,
+  PageText,
+  Proposal,
+  QueueCase,
+  ReviewBundle,
+  RuleResult,
+  TraceRun,
+} from "./types";
 
+// In this app the real API is the default; set NEXT_PUBLIC_USE_MOCKS=true to use the local fixtures.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8010";
+const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
+const MOCK_CLAUDE_DELAY = Number(process.env.NEXT_PUBLIC_MOCK_CLAUDE_DELAY_MS || 8000);
+const wait = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
+  constructor(
+    public status: number,
+    public detail: ApiErrorDetail,
+  ) {
+    super(
+      typeof detail === "string"
+        ? detail
+        : detail.map((i) => `${i.loc.slice(1).join(".")}: ${i.msg}`).join("; "),
+    );
   }
 }
-
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    let detail = res.statusText;
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, init);
+  if (!response.ok) {
+    let body: { detail?: ApiErrorDetail };
     try {
-      const body = await res.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail ?? body);
+      body = await response.json();
     } catch {
-      /* non-JSON error body */
+      body = { detail: `Request failed (${response.status})` };
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(response.status, body.detail ?? `Request failed (${response.status})`);
   }
-  return res.json() as Promise<T>;
+  return response.json();
+}
+const mockCases = structuredClone(cases);
+const mockReview = structuredClone(review);
+function mockProposal(): Proposal {
+  if (!mockReview.proposal) throw new ApiError(404, "proposal not found");
+  return mockReview.proposal;
 }
 
-export type Disposition =
-  | "DEFICIENCY_NOTICE"
-  | "INITIAL_REVIEW_PASS"
-  | "SUPPLEMENTAL_REVIEW_REQUIRED"
-  | "NEEDS_ENGINEER_DETERMINATION";
-
-export interface Verdict {
-  name: string;
-  passed: boolean;
-  detail: string;
-  data: Record<string, unknown>;
+export async function health() {
+  if (USE_MOCKS) {
+    await wait();
+    return { status: "ok", db: "ok" };
+  }
+  return request<{ status: string; db: string }>("/health");
 }
-
-export interface Item {
-  description: string;
-  basis_kind: "screen" | "fact" | "discrepancy" | "missing_document";
-  basis_ref: string;
-  rule_section: string | null;
-  rule_sheet: number | null;
+export async function listCases(): Promise<QueueCase[]> {
+  if (USE_MOCKS) {
+    await wait();
+    return structuredClone(mockCases);
+  }
+  return request("/cases");
 }
-
-export interface Proposal {
-  id: string;
-  disposition: Disposition;
-  model_disposition: Disposition | null;
-  status: "pending_review" | "approved" | "edited" | "rejected";
-  letter_md: string;
-  items: Item[];
-  guardrail_verdicts: Verdict[];
-  agent_run_id: string | null;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  review_note: string | null;
-  created_at: string;
+export async function getCase(id: string) {
+  if (USE_MOCKS) {
+    await wait();
+    const item = mockCases.find((c) => c.case_id === id);
+    if (!item) throw new ApiError(404, "case not found");
+    return {
+      id: item.case_id,
+      domain: item.domain,
+      status: item.status,
+      submitter: item.submitter,
+      received_at: item.received_at,
+      documents: mockReview.documents,
+    };
+  }
+  return request(`/cases/${id}`);
 }
-
-export interface QueueRow {
-  case_id: string;
-  status: string;
-  submitter: string | null;
-  received_at: string;
-  applicant_name: string | null;
-  site_address: string | null;
-  documents: number;
-  proposal: { id: string; disposition: Disposition; status: string; guardrail_failures: number } | null;
+export async function getReview(id: string): Promise<ReviewBundle> {
+  if (USE_MOCKS) {
+    await wait();
+    if (!mockCases.some((c) => c.case_id === id)) throw new ApiError(404, "case not found");
+    return structuredClone(mockReview);
+  }
+  return request(`/cases/${id}/review`);
 }
-
-export interface Citation {
-  ruleset?: string;
-  section: string;
-  sheet: number;
-  quote?: string;
-  interpretation?: string;
+export async function runReview(
+  id: string,
+  useLlm = true,
+): Promise<{ llm_used: boolean; disposition_floor: string; proposal: Proposal }> {
+  if (USE_MOCKS) {
+    if (!mockCases.some((c) => c.case_id === id)) throw new ApiError(404, "case not found");
+    await wait(useLlm ? MOCK_CLAUDE_DELAY : 500);
+    const item = mockCases.find((c) => c.case_id === id);
+    if (item) {
+      item.status = "pending_review";
+      item.proposal = {
+        id: mockProposal().id,
+        disposition: mockProposal().disposition,
+        status: "pending_review",
+        guardrail_failures: 1,
+      };
+    }
+    return {
+      llm_used: useLlm,
+      disposition_floor: "DEFICIENCY_NOTICE",
+      proposal: structuredClone(mockProposal()),
+    };
+  }
+  return request(`/cases/${id}/review?use_llm=${useLlm}`, { method: "POST" });
 }
-
-export interface ScreenRow {
-  screen: string;
-  status: "PASS" | "FAIL" | "INCONCLUSIVE" | "NOT_APPLICABLE" | "SKIPPED";
-  reason: string | null;
-  formula: string | null;
-  computed: string | null;
-  threshold: string | null;
-  inputs: Record<string, string>;
-  citations: Citation[];
-  classification: string | null;
-  blocker: string | null;
-  routed_by: string | null;
-  missing_inputs: string[];
-  synthetic_inputs: string[];
-  overrides: Record<string, string>;
-  input_hash: string;
-  engine_version: string;
+export async function getTrace(id: string): Promise<TraceRun[]> {
+  if (USE_MOCKS) {
+    await wait();
+    return structuredClone(trace);
+  }
+  return request(`/cases/${id}/trace`);
 }
-
-export interface Fact {
-  id: string;
-  field: string;
-  value: string;
-  unit: string | null;
-  instance: string | null;
-  value_as_written: string | null;
-  unit_as_written: string | null;
-  document_id: string;
-  document_kind: string;
-  page_no: number;
-  quote: string;
-  verification: string;
+export async function decide(
+  id: string,
+  input: {
+    action: "approve" | "edit" | "reject";
+    reviewer: string;
+    note?: string;
+    letter_md?: string | null;
+  },
+): Promise<Proposal> {
+  if (USE_MOCKS) {
+    await wait();
+    if (!input.reviewer.trim())
+      throw new ApiError(422, [
+        {
+          type: "string_too_short",
+          loc: ["body", "reviewer"],
+          msg: "String should have at least 1 character",
+          input: "",
+        },
+      ]);
+    if (input.action === "edit" && !input.letter_md)
+      throw new ApiError(422, "edit requires the revised letter_md");
+    if (mockProposal().status !== "pending_review")
+      throw new ApiError(409, `proposal was already ${mockProposal().status}`);
+    mockReview.proposal = {
+      ...mockProposal(),
+      status:
+        input.action === "approve" ? "approved" : input.action === "edit" ? "edited" : "rejected",
+      letter_md:
+        input.action === "edit"
+          ? (input.letter_md ?? mockProposal().letter_md)
+          : mockProposal().letter_md,
+      reviewed_by: input.reviewer,
+      reviewed_at: new Date().toISOString(),
+      review_note: input.note ?? null,
+    };
+    return structuredClone(mockProposal());
+  }
+  return request(`/proposals/${id}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }
-
-export interface ReviewBundle {
-  case: { id: string; status: string; submitter: string | null; received_at: string };
-  application: { utility: string; applicant_name: string | null; site_address: string | null; circuit_model_id: string | null } | null;
-  documents: { id: string; kind: string; filename: string; page_count: number; sha256: string;
-    pages: { page_no: number; has_text_layer: boolean; anchor: string }[] }[];
-  facts: Fact[];
-  discrepancies: { field: string; observed: { value: unknown; sources: { fact_ids: string[]; derivation: string | null }[]; chosen: boolean }[];
-    material: boolean | null; method: string | null; rationale: string | null }[];
-  screens: ScreenRow[];
-  scenarios: ScreenRow[];
-  proposal: Proposal | null;
+export async function listEvals(): Promise<EvalRun[]> {
+  if (USE_MOCKS) {
+    await wait();
+    return structuredClone(evalRuns);
+  }
+  return request("/evals");
 }
-
-export interface TraceRun {
-  id: string;
-  model: string;
-  step_budget: number;
-  steps_used: number;
-  cost_ceiling_usd: string;
-  cost_usd: string;
-  terminated_by: string | null;
-  started_at: string;
-  ended_at: string | null;
-  steps: { n: number; role: string; tool: string | null; args: Record<string, unknown> | null; result: unknown;
-    input_tokens: number | null; output_tokens: number | null; cost_usd: string | null; latency_ms: number | null }[];
+export async function getEval(id: string): Promise<EvalDetail> {
+  if (USE_MOCKS) {
+    await wait();
+    const first = evalRuns.at(0);
+    if (!evalRuns.some((r) => r.id === id)) throw new ApiError(404, "eval run not found");
+    return structuredClone({ ...evalDetail, id, mode: id === first?.id ? "oracle" : "live" });
+  }
+  return request(`/evals/${id}`);
 }
-
-export interface EvalSummary {
-  id: string;
-  mode: "oracle" | "live";
-  status: string;
-  note: string | null;
-  started_at: string;
-  finished_at: string | null;
-  packets: number | null;
-  disposition_accuracy: number | null;
-  detection: { precision: number | null; recall: number | null; true_positives: number; false_positives: number } | null;
-  cost_usd: { total: string; per_application_mean: string | null; per_application_max: string | null } | null;
+export async function listFamilies(): Promise<DefectFamily[]> {
+  if (USE_MOCKS) {
+    await wait();
+    return structuredClone(families);
+  }
+  return request("/evals/families");
 }
-
-export interface EvalRunDetail {
-  id: string;
-  mode: string;
-  status: string;
-  note: string | null;
-  metrics: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-  packets: Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
-  started_at: string;
-  finished_at: string | null;
+export async function createDemoPacket(input: {
+  family: string;
+  seed?: number;
+  oracle_facts?: boolean;
+}) {
+  if (USE_MOCKS) {
+    await wait();
+    const family = families.find((f) => f.name === input.family);
+    if (!family)
+      throw new ApiError(
+        422,
+        `family must be one of [${families.map((f) => `'${f.name}'`).join(", ")}]`,
+      );
+    return {
+      case_id: CASE_ID,
+      family: family.name,
+      expected_disposition: family.expected,
+      description: family.description,
+      oracle_facts: input.oracle_facts ?? false,
+    };
+  }
+  return request("/demo/packets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 }
-
-export const DISPOSITION_LABEL: Record<Disposition, string> = {
-  INITIAL_REVIEW_PASS: "Initial Review pass",
-  DEFICIENCY_NOTICE: "Deficiency notice",
-  SUPPLEMENTAL_REVIEW_REQUIRED: "Supplemental Review required",
-  NEEDS_ENGINEER_DETERMINATION: "Needs engineer determination",
-};
+export async function createApplication(input: {
+  utility: string;
+  submitter?: string;
+  applicant_name?: string;
+  site_address?: string;
+}) {
+  if (USE_MOCKS) {
+    await wait();
+    if (!input.utility)
+      throw new ApiError(422, [
+        { type: "missing", loc: ["body", "utility"], msg: "Field required", input },
+      ]);
+    return { case_id: "8d8a6fd0-542e-40eb-9354-56b623e4b22c", status: "received" as const };
+  }
+  return request<{ case_id: string; status: "received" }>("/interconnection/applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+export async function uploadDocument(
+  caseId: string,
+  kind: DocumentKind,
+  file: File,
+): Promise<CaseDocument> {
+  if (USE_MOCKS) {
+    await wait(700);
+    if (file.size > 26214400) throw new ApiError(413, "file exceeds 26214400 bytes");
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"))
+      throw new ApiError(422, "file is not a PDF");
+    return {
+      id: crypto.randomUUID(),
+      kind,
+      filename: file.name,
+      sha256: "c697a2bdc5296d192f15ee18d7c9cb7b14195c8ae86532b5f7442cce826b97c1",
+      page_count: 2,
+      created_at: new Date().toISOString(),
+      pages: [
+        { page_no: 1, anchor: "c697a2bdc529#p1", has_text_layer: true, char_count: 232 },
+        { page_no: 2, anchor: "c697a2bdc529#p2", has_text_layer: true, char_count: 274 },
+      ],
+    };
+  }
+  const body = new FormData();
+  body.append("kind", kind);
+  body.append("file", file);
+  return request(`/cases/${caseId}/documents`, { method: "POST", body });
+}
+export function documentFileUrl(caseId: string, documentId: string, page?: number) {
+  return `${API_URL}/cases/${caseId}/documents/${documentId}/file${page ? `#page=${page}` : ""}`;
+}
+export async function getDocumentPage(
+  caseId: string,
+  documentId: string,
+  pageNo: number,
+): Promise<PageText> {
+  if (USE_MOCKS) {
+    await wait();
+    const fact = mockReview.facts.find((f) => f.document_id === documentId && f.page_no === pageNo);
+    return {
+      document_id: documentId,
+      page_no: pageNo,
+      anchor: `mock#p${pageNo}`,
+      has_text_layer: true,
+      text: `PG&E Rule 21 Interconnection Request\n${fact?.quote ?? "Document evidence page"}\nService address: ${mockReview.application?.site_address ?? ""}\nInstaller: Golden State Solar\nTariff: Net Billing Tariff (NBT-1)`,
+    };
+  }
+  return request(`/cases/${caseId}/documents/${documentId}/pages/${pageNo}`);
+}
+export async function extractDocument(caseId: string, documentId: string) {
+  if (USE_MOCKS) {
+    await wait(MOCK_CLAUDE_DELAY);
+    return {
+      document_id: documentId,
+      model: "claude-opus-5",
+      cost_usd: "0.0231",
+      accepted: [],
+      rejected: [],
+    };
+  }
+  return request(`/cases/${caseId}/documents/${documentId}/extract`, { method: "POST" });
+}
+export async function searchRules(q: string, limit = 5): Promise<RuleResult[]> {
+  if (USE_MOCKS) {
+    await wait();
+    if (q.length < 2)
+      throw new ApiError(422, [
+        {
+          type: "string_too_short",
+          loc: ["query", "q"],
+          msg: "String should have at least 2 characters",
+          input: q,
+        },
+      ]);
+    return structuredClone(rules.slice(0, limit));
+  }
+  return request(`/rules/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
