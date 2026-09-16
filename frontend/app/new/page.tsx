@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { NewPage } from "@/views/new-view";
-
-export const metadata: Metadata = { title: "New Application" };
-
-export default function Page() {
-  return <NewPage />;
+// Applications now start in the applicant portal.
+export default function NewApplication() {
+  redirect("/portal/new");
 }

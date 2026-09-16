@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, SlidersHorizontal, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import type { DefectFamily, QueueCase } from "@/lib/types";
 import { createDemoPacket, listCases, runReview } from "@/lib/api";
 import { AppLink, useAppNavigate } from "@/components/app-link";
 import { Badge, Button, Panel } from "@/components/ui";
 import { DispositionBadge } from "@/components/status";
+const AI_REVIEWING = new Set(["extracting", "reconciling", "screening", "agent_review"]);
+
 export function QueuePage({
   initial,
   families,
@@ -27,13 +29,20 @@ export function QueuePage({
   const [elapsed, setElapsed] = useState(0);
   const [demo, setDemo] = useState(false);
   const navigate = useAppNavigate();
+  const inProgress = cases.some((c) => AI_REVIEWING.has(c.status));
+  // Portal submissions are reviewed automatically in the background; refresh until those drafts are ready.
+  useEffect(() => {
+    if (!inProgress) return;
+    const timer = setInterval(() => listCases().then(setCases, () => {}), 5000);
+    return () => clearInterval(timer);
+  }, [inProgress]);
   const filtered = useMemo(
     () =>
       cases
         .filter(
           (c) =>
             (showEval || !(c.submitter ?? "").startsWith("[eval")) &&
-            (status === "all" || c.status === status) &&
+            (status === "all" || c.status === status || (status === "ai" && AI_REVIEWING.has(c.status))) &&
             `${c.applicant_name ?? ""} ${c.site_address ?? ""} ${c.submitter ?? ""}`
               .toLowerCase()
               .includes(q.toLowerCase()),
@@ -65,7 +74,9 @@ export function QueuePage({
         <div>
           <div className="eyebrow">INTERCONNECTION OPERATIONS</div>
           <h1>Review queue</h1>
-          <p>Applications waiting for an engineer’s attention.</p>
+          <p>
+            Applications waiting for an engineer’s attention. Portal submissions arrive here already drafted.
+          </p>
         </div>
         <Button onClick={() => setDemo(true)}>
           <Sparkles size={16} />
@@ -86,6 +97,7 @@ export function QueuePage({
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="all">All statuses</option>
             <option value="received">Ready to run</option>
+            <option value="ai">AI drafting</option>
             <option value="pending_review">Needs review</option>
             <option value="closed">Closed</option>
           </select>
@@ -129,6 +141,7 @@ export function QueuePage({
                 <strong>{c.applicant_name ?? "Applicant not provided"}</strong>
                 <small>{c.site_address ?? "Site not provided"}</small>
                 <small>{c.submitter ?? "Submitter not provided"}</small>
+                {(c.submissions ?? 0) > 1 && <Badge tone="amber">Resubmission #{c.submissions! - 1}</Badge>}
               </span>
               <span>
                 {new Date(c.received_at).toLocaleDateString()}
@@ -151,12 +164,20 @@ export function QueuePage({
                 )}
               </span>
               <span>
-                <Badge tone={c.status === "pending_review" ? "blue" : "neutral"}>
-                  {c.status.replaceAll("_", " ")}
-                </Badge>
+                {AI_REVIEWING.has(c.status) ? (
+                  <Badge tone="blue">
+                    <Loader2 size={12} className="spin" /> AI drafting
+                  </Badge>
+                ) : (
+                  <Badge tone={c.status === "pending_review" ? "blue" : "neutral"}>
+                    {c.status.replaceAll("_", " ")}
+                  </Badge>
+                )}
               </span>
               <span>
-                {c.proposal ? (
+                {AI_REVIEWING.has(c.status) ? (
+                  <span className="muted">Draft on its way</span>
+                ) : c.proposal ? (
                   <AppLink to={`/review/${c.case_id}`} className="button-link">
                     Open review
                   </AppLink>

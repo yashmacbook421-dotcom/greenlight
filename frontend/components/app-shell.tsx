@@ -1,18 +1,27 @@
 "use client";
 
 import { AppLink } from "./app-link";
-import { ClipboardCheck, FlaskConical, Info, Moon, Plus, Sun } from "lucide-react";
+import { ClipboardCheck, FlaskConical, Globe, Info, Moon, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+
+const THEME_STORAGE_KEY = "greenlight-theme";
+
 const nav = [
   { to: "/queue", label: "Queue", icon: ClipboardCheck },
   { to: "/about", label: "How it works", icon: Info },
   { to: "/evals", label: "Evals", icon: FlaskConical },
-  { to: "/new", label: "New application", icon: Plus },
 ];
 export function AppShell({ children }: { children: ReactNode }) {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return savedTheme ? savedTheme === "dark" : prefersDark;
+  });
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    window.localStorage.setItem(THEME_STORAGE_KEY, dark ? "dark" : "light");
   }, [dark]);
   return (
     <div className="app-shell">
@@ -28,6 +37,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span>{label}</span>
             </AppLink>
           ))}
+          <AppLink to="/" className="nav-link sidebar-portal">
+            <Globe size={17} />
+            <span>Applicant site</span>
+          </AppLink>
         </nav>
         <div className="sidebar-foot">
           <button

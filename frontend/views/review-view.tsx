@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, ChevronDown, ExternalLink, FileText, Search, X } from "lucide-react";
-import type { Fact, Proposal, ProposalItem, ReviewBundle, RuleResult, Screen } from "@/lib/types";
-import { decide, documentFileUrl, getDocumentPage, searchRules } from "@/lib/api";
+import type { AppNotification, Fact, Proposal, ProposalItem, ReviewBundle, RuleResult, Screen } from "@/lib/types";
+import { decide, documentFileUrl, getDocumentPage, getReview, searchRules } from "@/lib/api";
 import { AppLink } from "@/components/app-link";
 import { Badge, Button, Field, Panel } from "@/components/ui";
 import { DispositionBadge, ScreenBadge, TrustTag, VerdictIcon } from "@/components/status";
@@ -161,6 +161,16 @@ export function ReviewPage({
         <Badge tone="neutral">Engineer decides</Badge>
         {proposal?.model_disposition && <TrustTag kind="override" />}
       </div>
+      {!!data.replaced_documents?.length && (
+        <div className="notice">
+          <FileText size={16} />
+          <span>
+            <strong>Resubmission.</strong> The applicant replaced{" "}
+            {data.replaced_documents.map((d) => `${pretty(d.kind)} (${d.filename})`).join(", ")} after a deficiency
+            notice. This draft reads only the current versions.
+          </span>
+        </div>
+      )}
       <div className="review-grid">
         <div className="review-main">
           {proposal ? (
@@ -293,7 +303,16 @@ export function ReviewPage({
               <DecisionPanel
                 key={proposal.id}
                 proposal={proposal}
-                onDecided={(p) => onUpdated({ ...data, case: { ...data.case, status: "closed" }, proposal: p })}
+                notifications={data.notifications}
+                onDecided={async (p) => {
+                  onUpdated({ ...data, case: { ...data.case, status: "closed" }, proposal: p });
+                  // Approving sends the applicant a notice; reload so its record shows here too.
+                  try {
+                    onUpdated(await getReview(data.case.id));
+                  } catch {
+                    // the decision stands even if this refresh fails
+                  }
+                }}
               />
               {proposal.agent_run_id ? (
                 <AppLink className="trace-link" to={`/trace/${data.case.id}`}>
@@ -521,7 +540,15 @@ function ScreenDetails({ s }: { s: Screen }) {
   );
 }
 
-function DecisionPanel({ proposal, onDecided }: { proposal: Proposal; onDecided: (p: Proposal) => void }) {
+function DecisionPanel({
+  proposal,
+  notifications = [],
+  onDecided,
+}: {
+  proposal: Proposal;
+  notifications?: AppNotification[];
+  onDecided: (p: Proposal) => void | Promise<void>;
+}) {
   const [reviewer, setReviewer] = useState("");
   const [note, setNote] = useState("");
   const [editing, setEditing] = useState(false);
@@ -543,7 +570,23 @@ function DecisionPanel({ proposal, onDecided }: { proposal: Proposal; onDecided:
           </span>
           {proposal.review_note && <p>{proposal.review_note}</p>}
         </div>
-        <p className="muted">Reviewed drafts are locked by the database.</p>
+        {notifications.map((n) => (
+          <p className="muted" key={n.created_at}>
+            Applicant notice: <strong>{n.subject}</strong> —{" "}
+            {n.status === "sent"
+              ? `emailed to ${n.recipient}`
+              : n.status === "queued"
+                ? `queued for ${n.recipient} (no mail server configured)`
+                : n.status === "no_recipient"
+                  ? "no contact email on this application"
+                  : `delivery failed: ${n.error ?? "unknown error"}`}
+          </p>
+        ))}
+        <p className="muted">
+          {proposal.status === "rejected"
+            ? "Rejected drafts stay internal: the applicant still sees the application as under review."
+            : "Released to the applicant portal. Reviewed drafts are locked by the database."}
+        </p>
       </Panel>
     );
   }
@@ -562,7 +605,10 @@ function DecisionPanel({ proposal, onDecided }: { proposal: Proposal; onDecided:
 
   return (
     <Panel title="Engineer decision">
-      <p className="muted">Nothing is sent without a named engineer.</p>
+      <p className="muted">
+        Nothing is sent without a named engineer. Approving or saving an edit releases the letter to the
+        applicant&apos;s portal; rejecting keeps it internal.
+      </p>
       <Field label="Engineer name">
         <input value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="Required" />
       </Field>

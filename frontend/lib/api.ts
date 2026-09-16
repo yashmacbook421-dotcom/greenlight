@@ -7,6 +7,8 @@ import type {
   EvalDetail,
   EvalRun,
   PageText,
+  PortalApplication,
+  PortalApplicationSummary,
   Proposal,
   QueueCase,
   ReviewBundle,
@@ -312,4 +314,41 @@ export async function searchRules(q: string, limit = 5): Promise<RuleResult[]> {
     return structuredClone(rules.slice(0, limit));
   }
   return request(`/rules/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
+
+/* ---- Applicant portal (live API only; the mock fixtures predate the portal) ---- */
+function livePortal() {
+  if (USE_MOCKS) throw new ApiError(501, "The applicant portal needs the live API; unset NEXT_PUBLIC_USE_MOCKS.");
+}
+export async function listPortalApplications(installer: string): Promise<PortalApplicationSummary[]> {
+  livePortal();
+  return request(`/portal/applications?installer=${encodeURIComponent(installer)}`);
+}
+export async function startPortalApplication(input: {
+  installer: string;
+  applicant_name: string;
+  site_address: string;
+  contact_email?: string;
+}): Promise<PortalApplication> {
+  livePortal();
+  return request("/portal/applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+export async function getPortalApplication(id: string): Promise<PortalApplication> {
+  livePortal();
+  return request(`/portal/applications/${id}`);
+}
+export async function uploadPortalDocument(id: string, kind: DocumentKind, file: File): Promise<PortalApplication> {
+  livePortal();
+  const body = new FormData();
+  body.append("kind", kind);
+  body.append("file", file);
+  return request(`/portal/applications/${id}/documents`, { method: "POST", body });
+}
+export async function submitPortalApplication(id: string): Promise<PortalApplication> {
+  livePortal();
+  return request(`/portal/applications/${id}/submit`, { method: "POST" });
 }

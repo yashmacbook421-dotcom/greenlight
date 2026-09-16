@@ -4,7 +4,14 @@ export type Disposition =
   | "SUPPLEMENTAL_REVIEW_REQUIRED"
   | "NEEDS_ENGINEER_DETERMINATION";
 export type ProposalStatus = "pending_review" | "approved" | "edited" | "rejected";
-export type CaseStatus = "received" | "screening" | "pending_review" | "closed";
+export type CaseStatus =
+  | "received"
+  | "extracting"
+  | "reconciling"
+  | "screening"
+  | "agent_review"
+  | "pending_review"
+  | "closed";
 export type ScreenStatus = "PASS" | "FAIL" | "INCONCLUSIVE" | "NOT_APPLICABLE" | "SKIPPED";
 export type DocumentKind =
   | "application_form"
@@ -24,6 +31,8 @@ export interface QueueCase {
   applicant_name: string | null;
   site_address: string | null;
   documents: number;
+  /** How many times the applicant has sent it: 1 for a first submission, more after corrections. 0 = not via the portal. */
+  submissions?: number;
   proposal: null | {
     id: string;
     disposition: Disposition;
@@ -131,11 +140,13 @@ export interface ReviewBundle {
     circuit_model_id: string | null;
   } | null;
   documents: CaseDocument[];
+  replaced_documents?: ReplacedDocument[];
   facts: Fact[];
   discrepancies: Discrepancy[];
   screens: Screen[];
   scenarios: Screen[];
   proposal: Proposal | null;
+  notifications?: AppNotification[];
   _note?: string;
 }
 export interface TraceStep {
@@ -244,3 +255,86 @@ export interface ApiValidationIssue {
   ctx?: Record<string, unknown>;
 }
 export type ApiErrorDetail = string | ApiValidationIssue[];
+
+export interface ReplacedDocument {
+  id: string;
+  kind: DocumentKind;
+  filename: string;
+  page_count: number;
+  uploaded_at: string;
+  replaced_at: string;
+}
+
+/* ---- Applicant portal: only what an applicant may see ---- */
+export type PortalStatus =
+  | "draft"
+  | "under_review"
+  | "action_required"
+  | "passed_initial_review"
+  | "supplemental_review"
+  | "engineering_review";
+export interface PortalDocument {
+  id: string;
+  kind: DocumentKind;
+  label: string;
+  filename: string;
+  page_count: number;
+  uploaded_at: string;
+  replaced_at: string | null;
+}
+export interface PortalLetter {
+  id: string;
+  outcome: PortalStatus;
+  outcome_label: string;
+  letter_md: string;
+  issued_at: string;
+  issued_by: string;
+}
+export interface PortalTimelineEntry {
+  at: string;
+  kind: string;
+  label: string;
+  detail: string | null;
+}
+export interface AppNotification {
+  kind: string;
+  subject: string;
+  recipient: string | null;
+  status: "queued" | "sent" | "failed" | "no_recipient";
+  created_at: string;
+  sent_at: string | null;
+  error?: string | null;
+}
+export interface PortalApplication {
+  id: string;
+  reference: string;
+  installer: string;
+  utility: string;
+  applicant_name: string;
+  site_address: string;
+  contact_email: string | null;
+  status: PortalStatus;
+  status_label: string;
+  status_detail: string;
+  started_at: string;
+  submitted_at: string | null;
+  required_documents: { kind: DocumentKind; label: string; uploaded: boolean }[];
+  documents: PortalDocument[];
+  replaced_documents: PortalDocument[];
+  can_upload: boolean;
+  can_submit: boolean;
+  submit_blocker: string | null;
+  letters: PortalLetter[];
+  timeline: PortalTimelineEntry[];
+  notifications: AppNotification[];
+}
+export interface PortalApplicationSummary {
+  id: string;
+  reference: string;
+  applicant_name: string;
+  site_address: string;
+  status: PortalStatus;
+  status_label: string;
+  updated_at: string;
+  documents: number;
+}
