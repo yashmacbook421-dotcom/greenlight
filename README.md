@@ -30,6 +30,17 @@ to be wrong about**. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 Dispositions correspond to notices Rule 21 itself requires: `DEFICIENCY_NOTICE` (§E.5.b.i),
 `INITIAL_REVIEW_PASS` (§F.1.b), `SUPPLEMENTAL_REVIEW_REQUIRED` (§F.2.a), and `NEEDS_ENGINEER_DETERMINATION`.
 
+## Two sides
+
+- **Applicant portal** (`/`, `/portal`): an installer starts an application, uploads the packet, and submits.
+  Submission starts the review automatically. The installer sees a status and, once a named engineer approves it,
+  the decision letter. After a deficiency notice they replace documents and resubmit; the replaced versions stay
+  on record but their facts no longer count. Drafts, guardrail verdicts and the agent trace never reach this side.
+  Releasing a decision also records a notice to the applicant's contact email, shown on both sides. It is only
+  delivered when SMTP is configured (see `.env.example`); otherwise it stays `queued`, which is what a demo shows.
+- **Engineer workspace** (`/queue`, `/review/:id`): portal submissions arrive already drafted, with resubmissions
+  marked. Approving or editing a draft releases its letter to the portal; rejecting keeps it internal.
+
 ## Run it
 
 **Docker (everything):**
@@ -41,7 +52,9 @@ export ANTHROPIC_API_KEY=...                              # optional: without it
 docker compose up -d --build
 ```
 
-- UI: http://localhost:3100 (queue → add a demo application → run review → open review)
+- Applicant site: http://localhost:3100 (start an application → upload → submit). A sample packet with a real
+  SolarEdge spec sheet is in `samples/sample-packet-delgado/`.
+- Engineer workspace: http://localhost:3100/queue (open review → approve, and the letter appears in the portal)
 - API: http://localhost:8010/docs
 
 The frontend image builds with webpack, because Turbopack exceeds the ~2 GB memory of a default Docker Desktop
@@ -58,7 +71,7 @@ cd ../frontend && npm install && npm run dev -- --port 3100
 
 Host ports are 8010 (API), 3100 (UI) and 5433 (Postgres) to avoid the usual 8000/3000/5432 clashes.
 
-**Tests:** `cd backend && .venv/bin/pytest` (233 tests; uses a throwaway database on the compose Postgres).
+**Tests:** `cd backend && .venv/bin/pytest` (245 tests; uses a throwaway database on the compose Postgres).
 
 ## Evals
 
@@ -105,4 +118,5 @@ Read these honestly:
 - Real PG&E ICA values (including the 576-hour profiles Screen M uses) are not ingested; circuits are synthetic.
 - Rules search is Postgres full-text search, not embeddings. It's deterministic and cites section and sheet,
   but is weaker on paraphrased queries.
-- No authentication: reviewer identity is typed, not verified.
+- No authentication: reviewer identity is typed, not verified, and the portal's installer sign-in is a remembered
+  company name. Anyone who knows an application's link can open it.
