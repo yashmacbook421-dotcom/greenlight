@@ -8,9 +8,25 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from app.core import notify
 from app.core.llm import LLMError
-from app.core.models import AgentRun, AgentStep, Case, Discrepancy, Document, ExtractedFact, Proposal, RuleResult
+from app.core.models import (
+    AgentRun,
+    AgentStep,
+    Case,
+    CaseEvent,
+    CaseEventKind,
+    CaseStatus,
+    Discrepancy,
+    Document,
+    ExtractedFact,
+    Notification,
+    Proposal,
+    RuleResult,
+)
 from app.deps import OptionalLLMDep, SessionDep, StorageDep
+from app.domains.interconnection import DOMAIN
+from app.domains.interconnection.applicant import DECISION_RELEASED, decision_notice
 from app.domains.interconnection.models import InterconnectionApplication
 from app.domains.interconnection.pipeline import review_case
 
@@ -31,7 +47,8 @@ def _latest_proposal(session: SessionDep, case_id: uuid.UUID) -> Proposal | None
 
 @router.get("/cases")
 def queue(session: SessionDep, limit: Annotated[int, Query(ge=1, le=500)] = 100) -> list[dict[str, Any]]:
-    cases = session.scalars(select(Case).order_by(Case.received_at.desc()).limit(limit)).all()
+    cases = session.scalars(select(Case).where(Case.status != CaseStatus.DRAFT)  # drafts belong to the applicant
+                           .order_by(Case.received_at.desc()).limit(limit)).all()
     out = []
     for c in cases:
         app = session.get(InterconnectionApplication, c.id)
@@ -40,7 +57,10 @@ def queue(session: SessionDep, limit: Annotated[int, Query(ge=1, le=500)] = 100)
             "case_id": str(c.id), "domain": c.domain, "status": c.status, "submitter": c.submitter,
             "received_at": c.received_at, "applicant_name": app.applicant_name if app else None,
             "site_address": app.site_address if app else None,
-            "documents": session.scalar(select(func.count()).select_from(Document).where(Document.case_id == c.id)),
+            "documents": session.scalar(select(func.count()).select_from(Document)
+                                        .where(Document.case_id == c.id, Document.superseded_at.is_(None))),
+            "submissions": session.scalar(select(func.count()).select_from(CaseEvent).where(
+                CaseEvent.case_id == c.id, CaseEvent.kind.in_([CaseEventKind.SUBMITTED, CaseEventKind.RESUBMITTED]))),
             "proposal": None if latest is None else {
                 "id": str(latest.id), "disposition": latest.disposition, "status": latest.status,
                 "guardrail_failures": sum(1 for v in latest.guardrail_verdicts if not v.get("passed", True))},
@@ -69,7 +89,8 @@ def review_bundle(case_id: uuid.UUID, session: SessionDep) -> dict[str, Any]:
     if case is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "case not found")
     app = session.get(InterconnectionApplication, case_id)
-    docs = session.scalars(select(Document).where(Document.case_id == case_id).order_by(Document.created_at)).all()
+    all_docs = session.scalars(select(Document).where(Document.case_id == case_id).order_by(Document.created_at)).all()
+    docs = [d for d in all_docs if d.superseded_at is None]
     facts = session.execute(select(ExtractedFact, Document.kind).join(Document, ExtractedFact.document_id == Document.id)
                             .where(ExtractedFact.case_id == case_id).order_by(ExtractedFact.field)).all()
     results = session.scalars(select(RuleResult).where(RuleResult.case_id == case_id).order_by(RuleResult.run_at)).all()
@@ -82,6 +103,9 @@ def review_bundle(case_id: uuid.UUID, session: SessionDep) -> dict[str, Any]:
         "documents": [{"id": str(d.id), "kind": d.kind, "filename": d.filename, "page_count": d.page_count,
                        "sha256": d.sha256, "pages": [{"page_no": p.page_no, "has_text_layer": p.has_text_layer,
                                                       "anchor": d.anchor(p.page_no)} for p in d.pages]} for d in docs],
+        "replaced_documents": [{"id": str(d.id), "kind": d.kind, "filename": d.filename, "page_count": d.page_count,
+                                "uploaded_at": d.created_at, "replaced_at": d.superseded_at}
+                               for d in all_docs if d.superseded_at is not None],
         "facts": [{"id": str(f.id), "field": f.field, "value": f.value, "unit": f.unit, "instance": f.instance,
                    "value_as_written": f.value_as_written, "unit_as_written": f.unit_as_written,
                    "document_id": str(f.document_id), "document_kind": kind, "page_no": f.page_no, "quote": f.quote,
@@ -92,6 +116,10 @@ def review_bundle(case_id: uuid.UUID, session: SessionDep) -> dict[str, Any]:
         "screens": [_result_json(r) for r in results if not r.overrides],
         "scenarios": [_result_json(r) for r in results if r.overrides],
         "proposal": _proposal_json(latest) if latest else None,
+        "notifications": [{"kind": n.kind, "subject": n.subject, "recipient": n.recipient, "status": n.status,
+                           "created_at": n.created_at, "sent_at": n.sent_at, "error": n.error} for n in
+                          session.scalars(select(Notification).where(Notification.case_id == case_id)
+                                          .order_by(Notification.created_at.desc()))],
     }
 
 
@@ -144,8 +172,20 @@ def decide(proposal_id: uuid.UUID, body: Decision, session: SessionDep) -> dict[
     case = session.get(Case, proposal.case_id)
     if case is not None:
         case.status = "closed"
+        if proposal.status in ("approved", "edited"):
+            _notify_applicant(session, case, proposal)
     session.commit()
     return _proposal_json(proposal)
+
+
+def _notify_applicant(session: SessionDep, case: Case, proposal: Proposal) -> None:
+    """Released decisions are the only thing that reaches the applicant, so this is the only place notices start."""
+    if case.domain != DOMAIN:
+        return
+    recipient, subject, body = decision_notice(session, case, proposal)
+    notification = notify.record(session, case_id=case.id, kind=DECISION_RELEASED, recipient=recipient,
+                                 subject=subject, body=body)
+    notify.deliver(session, notification)
 
 
 @router.get("/cases/{case_id}/documents/{document_id}/file")

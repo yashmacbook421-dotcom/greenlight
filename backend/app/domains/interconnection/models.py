@@ -39,5 +39,7 @@ class InterconnectionApplication(Base):
     utility: Mapped[str] = mapped_column(String(64), nullable=False)
     applicant_name: Mapped[str | None] = mapped_column(Text)
     site_address: Mapped[str | None] = mapped_column(Text)
+    # Where decisions are sent. Optional: an application keyed in by utility staff may not have one.
+    contact_email: Mapped[str | None] = mapped_column(Text)
     # Resolved by the utility from the site, not asserted by the applicant; NULL until resolved.
     circuit_model_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("circuit_models.id"))

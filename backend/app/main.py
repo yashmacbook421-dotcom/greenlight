@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 
-from app.routers import cases, demo, evals, health, interconnection, review, rules
+from app.routers import cases, demo, evals, health, interconnection, portal, review, rules
 
 app = FastAPI(
     title="Project Greenlight",
@@ -23,3 +23,4 @@ app.include_router(rules.router)
 app.include_router(review.router)
 app.include_router(evals.router)
 app.include_router(demo.router)
+app.include_router(portal.router)

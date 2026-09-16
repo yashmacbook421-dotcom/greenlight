@@ -9,13 +9,14 @@ import io
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.core.models import Document, Page
+from app.core.models import Document, ExtractedFact, Page
 from app.core.storage import LocalStorage
 
 log = logging.getLogger(__name__)
@@ -97,3 +98,11 @@ def ingest_document(
     session.add(document)
     session.flush()
     return document, True
+
+
+def supersede_document(session: Session, document: Document) -> None:
+    """Retire a document the applicant has replaced. The file and pages stay for the audit trail; its facts go,
+    so the next review reads only the corrected version."""
+    session.execute(delete(ExtractedFact).where(ExtractedFact.document_id == document.id))
+    document.superseded_at = datetime.now(UTC)
+    session.flush()

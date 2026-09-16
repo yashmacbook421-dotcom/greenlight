@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     # When enabled, clearly labelled demonstration values are used; when disabled, D and E go to an engineer.
     synthetic_utility_practice: bool = True
 
+    # Applicant notices. Without smtp_host they are recorded and shown in the portal, but not delivered.
+    portal_base_url: str = "http://localhost:3100"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "interconnection@greenlight.example"
+    smtp_starttls: bool = True
+
     agent_step_budget: int = 12  # model calls per review
     agent_cost_ceiling_usd: str = "1.00"
 

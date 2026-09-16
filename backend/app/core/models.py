@@ -12,7 +12,7 @@ not left to application code:
 
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -51,6 +51,7 @@ def _created_at() -> Mapped[datetime]:
 
 
 class CaseStatus(enum.StrEnum):
+    DRAFT = "draft"  # started by the applicant, not yet submitted: invisible to reviewers
     RECEIVED = "received"
     EXTRACTING = "extracting"
     RECONCILING = "reconciling"
@@ -58,6 +59,15 @@ class CaseStatus(enum.StrEnum):
     AGENT_REVIEW = "agent_review"
     PENDING_REVIEW = "pending_review"
     CLOSED = "closed"
+
+
+class CaseEventKind(enum.StrEnum):
+    CREATED = "created"
+    DOCUMENT_ADDED = "document_added"
+    DOCUMENT_REPLACED = "document_replaced"
+    SUBMITTED = "submitted"
+    RESUBMITTED = "resubmitted"
+    REVIEW_FAILED = "review_failed"
 
 
 class RuleStatus(enum.StrEnum):
@@ -85,6 +95,13 @@ class ProposalStatus(enum.StrEnum):
     APPROVED = "approved"
     EDITED = "edited"
     REJECTED = "rejected"
+
+
+class NotificationStatus(enum.StrEnum):
+    QUEUED = "queued"  # recorded, and delivered only if a mail server is configured
+    SENT = "sent"
+    FAILED = "failed"
+    NO_RECIPIENT = "no_recipient"
 
 
 class Case(Base):
@@ -118,6 +135,9 @@ class Document(Base):
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_uri: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = _created_at()
+    # Set when the applicant uploads a corrected document of the same kind. Kept for the audit trail;
+    # its extracted facts are removed and it no longer takes part in review.
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     case: Mapped[Case] = relationship(back_populates="documents")
     pages: Mapped[list["Page"]] = relationship(
@@ -127,6 +147,46 @@ class Document(Base):
     def anchor(self, page_no: int) -> str:
         """Citation anchor that survives re-ingestion: tied to file content, not database ids."""
         return f"{self.sha256[:12]}#p{page_no}"
+
+
+class CaseEvent(Base):
+    """Append-only history of a case as its applicant sees it: started, submitted, documents replaced, resubmitted."""
+
+    __tablename__ = "case_events"
+    __table_args__ = (CheckConstraint(_in("kind", CaseEventKind), name="kind_valid"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str | None] = mapped_column(Text)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    # Application clock, like proposals.reviewed_at, so events and decisions interleave correctly on one timeline.
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                         default=lambda: datetime.now(UTC), nullable=False)
+
+
+class Notification(Base):
+    """One notice sent to the applicant. Recorded whether or not it could be delivered."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        CheckConstraint(_in("status", NotificationStatus), name="status_valid"),
+        CheckConstraint("(status = 'no_recipient') = (recipient IS NULL)", name="recipient_iff_addressed"),
+        CheckConstraint("(status = 'sent') = (sent_at IS NOT NULL)", name="sent_at_iff_sent"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    recipient: Mapped[str | None] = mapped_column(Text)
+    subject: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                                 default=lambda: datetime.now(UTC), nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Page(Base):
@@ -333,7 +393,9 @@ class Proposal(Base):
     reviewed_by: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_note: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = _created_at()
+    # Application clock: "latest proposal" must follow the order drafts were made, even within one transaction.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                                 default=lambda: datetime.now(UTC), nullable=False)
 
 
 class RuleChunk(Base):

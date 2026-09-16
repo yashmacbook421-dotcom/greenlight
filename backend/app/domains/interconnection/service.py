@@ -43,10 +43,10 @@ def practice() -> UtilityPractice | None:
 def load_facts(session: Session, case_id: uuid.UUID) -> tuple[list[FactView], list[str]]:
     rows = session.execute(
         select(ExtractedFact, Document.kind).join(Document, ExtractedFact.document_id == Document.id)
-        .where(ExtractedFact.case_id == case_id).order_by(Document.created_at, ExtractedFact.page_no, ExtractedFact.field)
+        .where(ExtractedFact.case_id == case_id, Document.superseded_at.is_(None)).order_by(Document.created_at, ExtractedFact.page_no, ExtractedFact.field)
     ).all()
     facts = [FactView(str(f.id), f.field, str(f.value), f.unit, f.instance, kind, f.page_no, f.quote) for f, kind in rows]
-    kinds = list(session.scalars(select(Document.kind).where(Document.case_id == case_id)).all())
+    kinds = list(session.scalars(select(Document.kind).where(Document.case_id == case_id, Document.superseded_at.is_(None))).all())
     return facts, kinds
 
 

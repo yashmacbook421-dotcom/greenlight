@@ -27,7 +27,8 @@ def review_case(session: Session, case: Case, *, client: MessagesClient | None, 
                 reextract: bool = False, judge: Judge | None = None) -> ReviewOutcome:
     extractions = []
     if client is not None:
-        documents = session.scalars(select(Document).where(Document.case_id == case.id).order_by(Document.created_at)).all()
+        documents = session.scalars(select(Document).where(Document.case_id == case.id, Document.superseded_at.is_(None))
+                                    .order_by(Document.created_at)).all()
         extracted = set(session.scalars(select(ExtractedFact.document_id).where(ExtractedFact.case_id == case.id)).all())
         for doc in documents:
             if reextract or doc.id not in extracted:
